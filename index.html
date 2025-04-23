@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Security Event Logger - Matrix Style</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'JetBrains Mono', monospace;
+      background: #000;
+      overflow: hidden;
+      color: #448ec0;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    #content {
+      position: relative;
+      z-index: 1;
+      padding: 2rem;
+      color: #46c6c8;
+    }
+
+    .glow-title {
+      font-size: 2.7rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #2d93a0, #00aaaa, #5dadc1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shimmer 4s linear infinite;
+      text-shadow: 0 0 3px #008866;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .event-card {
+      background: #0a0a0a;
+      padding: 1rem;
+      border: 1px solid #52a8c0;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      opacity: 0;
+      transform: translateX(-30px) scale(0.9);
+      animation: slideScaleFade 0.6s ease-out forwards;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+
+    @keyframes slideScaleFade {
+      to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+        box-shadow: 0 0 10px rgba(0, 255, 128, 0.3);
+      }
+    }
+
+    .event-card:hover {
+      box-shadow: 0 0 8px #00eaff;
+      border-color: #4f869b;
+    }
+
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 9999px;
+      margin-right: 0.5rem;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0,255,0,0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(0,255,0,0); }
+      100% { box-shadow: 0 0 0 0 rgba(0,255,0,0); }
+    }
+
+    #terminal-box {
+      background: #1a1a1a;
+      border: 2px solid #4a99b1;
+      box-shadow: 0 0 12px #46bcd0;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      max-width: 800px;
+      margin: 0 auto;
+      height: 600px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #eventFeed {
+      color: #00ff7f;
+      flex-grow: 1;
+      overflow-y: auto;
+      width: 100%;
+    }
+
+    .label { color: #00ffff; }
+    .value-os { color: #ff69b4; }
+    .value-cpu { color: #ffcc00; }
+    .value-mem { color: #00ff7f; }
+    .value-evt { color: #ff4500; }
+
+    .status-box {
+      display: flex;
+      align-items: center;
+      padding: 0.4rem 0.8rem;
+      border-radius: 0.5rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .active {
+      background-color: rgba(0, 128, 0, 0.2);
+      color: #5ebedb;
+      border: 1px solid #8ecbdf;
+    }
+
+    .inactive {
+      background-color: rgba(128, 0, 0, 0.3);
+      color: #ff4c4c;
+      border: 1px solid #ff4c4c;
+    }
+
+    #downloadButton {
+      background: #0a0a0a;
+      color: #00ff7f;
+      padding: 10px 15px;
+      border: 1px solid #00ff7f;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    #downloadButton:hover {
+      background: #00ff7f;
+      color: #0a0a0a;
+      border-color: #0a0a0a;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="matrix"></canvas>
+
+  <div id="content">
+    <h1 class="glow-title">SECURITY EVENT LOGGER</h1>
+
+    <div id="connectionStatus" class="flex justify-end items-center mb-4 pr-4">
+      <div id="statusBox" class="status-box inactive">
+        <div id="statusDot" class="status-indicator bg-red-500"></div>
+        <span id="statusText">SYSTEM NOT ACTIVE</span>
+      </div>
+    </div>
+
+    <div id="terminal-box">
+      <div id="eventFeed" class="text-green-400">
+        <p class="text-green-500 text-center">Waiting for events...</p>
+      </div>
+      <button id="downloadButton">Download Logs</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d');
+    canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth;
+    const binary = "01";
+    const fontSize = 16;
+    const columns = canvas.width / fontSize;
+    const drops = Array.from({ length: columns }, () => 1);
+
+    function drawMatrix() {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#0F0";
+      ctx.font = `${fontSize}px JetBrains Mono`;
+      for (let i = 0; i < drops.length; i++) {
+        const text = binary[Math.floor(Math.random() * binary.length)];
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+      }
+    }
+
+    setInterval(drawMatrix, 33);
+
+    const statusBox = document.getElementById("statusBox");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const eventFeed = document.getElementById("eventFeed");
+    const downloadButton = document.getElementById("downloadButton");
+
+    const socket = new WebSocket("ws://localhost:3000");
+
+    socket.onopen = () => {
+      statusDot.classList.remove("bg-red-500");
+      statusDot.classList.add("bg-green-500", "animate-pulse");
+      statusBox.classList.replace("inactive", "active");
+      statusText.textContent = "SYSTEM ACTIVE";
+    };
+
+    socket.onclose = () => {
+      statusDot.classList.remove("bg-green-500", "animate-pulse");
+      statusDot.classList.add("bg-red-500");
+      statusBox.classList.replace("active", "inactive");
+      statusText.textContent = "SYSTEM NOT ACTIVE";
+    };
+
+    socket.onmessage = (message) => {
+      const data = JSON.parse(message.data);
+      const logItem = document.createElement("div");
+      logItem.className = "event-card";
+      logItem.innerHTML = `
+        <div class="text-green-400 mb-1 text-sm">${data.timestamp}</div>
+        <div><span class="label">OS:</span> <span class="value-os">${data.operatingSystem}</span></div>
+        <div><span class="label">CPU:</span> <span class="value-cpu">${data.cpuUsage}</span></div>
+        <div><span class="label">Memory:</span> <span class="value-mem">${data.freeMemory}</span></div>
+        <div class="mt-2"><span class="label">Event:</span> <span class="value-evt">${data.securityEvent}</span></div>
+      `;
+      eventFeed.querySelector("p")?.remove();
+      eventFeed.prepend(logItem);
+      while (eventFeed.children.length > 10) eventFeed.lastChild.remove();
+    };
+
+    downloadButton.addEventListener("click", () => {
+      const logEntries = eventFeed.querySelectorAll(".event-card");
+      if (!logEntries.length) {
+        alert("No logs to download.");
+        return;
+      }
+
+      let logContent = "";
+      logEntries.forEach(entry => {
+        logContent += entry.innerText + "\n---\n";
+      });
+
+      const blob = new Blob([logContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "security_events.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
