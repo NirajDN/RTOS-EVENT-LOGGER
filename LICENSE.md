@@ -20,8 +20,3 @@ LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
-
-By applying this license, you empower the community to freely use and contribute
-to this project while protecting the original creator's rights and disclaiming
-any warranties. Feel free to use, adapt, and share this software with proper
-credit to foster open collaboration and innovation.
